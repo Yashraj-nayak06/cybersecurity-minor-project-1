@@ -1,0 +1,243 @@
+Topics: Networking Fundamentals & Linux Fundamentals
+SECTION 1: NETWORKING FUNDAMENTALS 
+
+TASK 1: CASE STUDY - DESIGN A NETWORK FOR AN OFFICE BUILDING (25 MARKS)
+
+Q1. Calculate Device Requirements
+Formula: Required Capacity = Current Devices + (Current Devices * 0.20)
+- Ground Floor (Reception & Admin): 20 + 20*0.20 = 24 devices
+- First Floor (HR & Finance): 35 + 35*0.20 = 42 devices
+- Second Floor (Development Team): 60 + 60*0.20 = 72 devices
+- Third Floor (SOC & IT Ops): 45 + 45*0.20 = 54 devices
+- Server Room: 12 + 12*0.20 = 14.4 -> 15 devices
+
+Q2 & Q3. Subnetting & IP Address Allocation Table
+Assigned Base Network: 192.168.10.0/24 (Total 256 IPs)
+
+Allocation using Variable Length Subnet Masking (VLSM):
+
+1. Development Team (72 devices required -> needs 128 IPs block /25):
+   - Network Address: 192.168.10.0/25
+   - Subnet Mask: 255.255.255.128
+   - First Usable IP: 192.168.10.1
+   - Last Usable IP: 192.168.10.126
+   - Broadcast Address: 192.168.10.127
+   - Usable Hosts: 126
+
+2. SOC & IT Operations (54 devices required -> needs 64 IPs block /26):
+   - Network Address: 192.168.10.128/26
+   - Subnet Mask: 255.255.255.192
+   - First Usable IP: 192.168.10.129
+   - Last Usable IP: 192.168.10.190
+   - Broadcast Address: 192.168.10.191
+   - Usable Hosts: 62
+
+3. HR & Finance (42 devices required -> needs 64 IPs block /26):
+   - Network Address: 192.168.10.192/26
+   - Subnet Mask: 255.255.255.192
+   - First Usable IP: 192.168.10.193
+   - Last Usable IP: 192.168.10.254
+   - Broadcast Address: 192.168.10.255
+   - Usable Hosts: 62
+
+CRITICAL ANALYSIS FOR REMAINING DEPARTMENTS:
+Note: The /24 space (256 addresses) is fully exhausted after allocating Dev, SOC, and HR/Finance.
+Remaining required: Reception & Admin (24 hosts -> needs /27) and Server Room (15 hosts -> needs /27).
+
+Q4. Network Capacity Analysis
+1. Usable IP addresses in original 192.168.10.0/24: 254 usable IPs (256 - 2).
+2. Can all five departments fit into 192.168.10.0/24? 
+   No. Total capacity required across all departments including 20% growth is 207 IPs. However, due to IP block sizing rules (powers of 2), allocating blocks requires 128 + 64 + 64 + 32 + 32 = 320 IP addresses. Thus, a single /24 prefix is insufficient.
+3. Recommended Alternative Plan:
+   Upgrade to a /23 network prefix (e.g., 192.168.10.0/23, providing 512 IPs) or use a 10.0.0.0/16 private block.
+   Using 192.168.10.0/23 allocation:
+   - Development Team: 192.168.10.0/25 (192.168.10.1 - 192.168.10.126)
+   - SOC & IT Ops: 192.168.10.128/26 (192.168.10.129 - 192.168.10.190)
+   - HR & Finance: 192.168.10.192/26 (192.168.10.193 - 192.168.10.254)
+   - Reception & Admin: 192.168.11.0/27 (192.168.11.1 - 192.168.11.30)
+   - Server Room: 192.168.11.32/27 (192.168.11.33 - 192.168.11.62)
+4. Why Plan for Future Growth?
+   Planning prevents IP address exhaustion, reduces network redesign downtime, avoids re-IPing devices, and allows seamless addition of new equipment and VLANs.
+
+Q5. Network Design Description / Diagram Text
+[Internet] ---> [Edge Router / Firewall] ---> [Core Switch]
+                                                    |
+   +-----------------+-----------------+------------+------------+
+   |                 |                 |            |            |
+[VLAN 10: Admin] [VLAN 20: HR] [VLAN 30: Dev] [VLAN 40: SOC] [VLAN 50: Servers]
+   |
+[VPN Gateway] <--- (Remote Workers)
+
+Q6. Security Recommendations
+1. Departmental Network Separation (VLANs & 802.1Q): Segregates network traffic so compromised devices in lower-security zones cannot access critical zones.
+2. Firewall Rules (Access Control Lists): Enforces strict inter-VLAN routing policies, allowing traffic only on necessary ports and protocols.
+3. VPN Authentication (Multi-Factor Authentication & IPsec/TLS): Ensures remote workers are strongly authenticated before accessing internal assets.
+4. Server Access Restrictions (Micro-segmentation & Zero Trust): Limits server access strictly to authorized IP ranges and role-based accounts.
+
+
+TASK 2: NETWORKING CONCEPTS AND TROUBLESHOOTING 
+
+Q1. Private IP vs Public IP
+- Private IP: Used within internal local networks (LANs) and is not routable on the public internet. Example ranges: 10.0.0.0/8, 192.168.0.0/16.
+- Public IP: Globally unique address assigned by an ISP, used for communication over the public internet.
+
+Q2. Subnetting Definition
+Subnetting is the practice of dividing a single large network into smaller, logically isolated subnets. Organizations use it to improve network performance (reduce broadcast domains), enhance security, and optimize IP address utilization.
+
+Q3. Role of Default Gateway
+The Default Gateway (e.g., 192.168.1.1) acts as the exit point for local traffic destined for external networks. When a computer detects that a target IP is outside its subnet, it encapsulates the packet and sends it to the default gateway router for external routing.
+
+Q4. DNS Issue Analysis
+If a website is reachable via IP address but not via domain name, the problem is DNS name resolution.
+Causes & Investigation:
+1. Incorrect DNS Server Config: Check `ipconfig /all` or `/etc/resolv.conf`. Test resolution using `nslookup domain.com`.
+2. DNS Cache Corruption: Flush local DNS cache (`ipconfig /flushdns` on Windows or `resolvectl flush-caches` on Linux).
+
+Q5. DHCP Concepts
+- DHCP (Dynamic Host Configuration Protocol) automatically assigns IP addresses, subnet masks, default gateways, and DNS servers to client devices.
+- If DHCP fails, a device may self-assign an APIPA address (169.254.x.x), resulting in a lack of local gateway access and no internet connectivity.
+
+Q6. TCP vs UDP
+- TCP (Transmission Control Protocol): Connection-oriented, reliable, guarantees packet delivery and ordering (e.g., HTTPS, SSH).
+- UDP (User Datagram Protocol): Connectionless, fast, lightweight with no delivery guarantees (e.g., DNS, VoIP, Video Streaming).
+
+Q7. VPN Function & Risk
+- Function: Creates an encrypted tunnel over an untrusted network (Internet), securing data transmission between remote workers and internal servers.
+- Risk: Poorly configured VPNs without MFA or split-tunneling controls can allow compromised remote endpoints to spread malware directly into the internal network.
+
+Q8. Troubleshooting Internet Connectivity Order
+1. Local IP Check (`ipconfig` / `ip addr`): Verify valid IP and gateway settings.
+2. Gateway Connectivity (`ping <gateway_ip>`): Confirm local network physical/datalink connection.
+3. External IP Reachability (`ping 8.8.8.8`): Verify internet routing past the router.
+4. DNS Resolution Test (`nslookup google.com`): Verify domain name resolution.
+5. Path Routing (`tracert 8.8.8.8` / `traceroute 8.8.8.8`): Identify where external packets are dropping.
+
+
+TASK 3: PRACTICAL NETWORKING COMMANDS 
+
+Activity 1 Commands:
+Linux: `ip addr` and `ip route`
+Windows: `ipconfig /all`
+
+Activity 2 Commands:
+1. Local Gateway Ping: `ping 192.168.1.1`
+2. External IP Connectivity: `ping 8.8.8.8`
+3. Domain Name Resolution: `nslookup google.com`
+4. Trace Route: `traceroute 8.8.8.8` (Linux) or `tracert 8.8.8.8` (Windows)
+
+Activity 3 Interpretation:
+1. Successful Ping: Confirms layer 3 ICMP reachability and network path integrity.
+2. Failed Ping: Does NOT always mean host is unreachable; firewalls frequently block ICMP echo requests.
+3. Purpose of DNS Lookup: Translates human-readable domain names into numerical IP addresses.
+4. Traceroute Information: Shows intermediate router hops, latency per hop, and packet drop points.
+5. IP without Internet: Indicates valid local connection, but misconfigured gateway, DNS failure, or upstream ISP failure.
+
+
+--------------------------------------------------------------------------------
+SECTION 2: LINUX FUNDAMENTALS
+--------------------------------------------------------------------------------
+
+TASK 4: LINUX FILESYSTEM NAVIGATION AND COMMANDS (15 MARKS)
+
+Activity 1 Commands:
+1. Working Directory: `pwd`
+2. Logged-in Username: `whoami`
+3. System Hostname: `hostname`
+4. Linux Kernel Version: `uname -r`
+5. Date and Time: `date`
+
+Activity 2 Directories & Purposes:
+- /home: User personal data directories. Example: `/home/user/documents`
+- /etc: System-wide configuration files. Example: `/etc/passwd`, `/etc/network/interfaces`
+- /var: Variable data files that change during system operation. Example: `/var/log/syslog`
+- /usr: User binaries, documentation, and libraries. Example: `/usr/bin/python3`
+- /bin: Essential user command binaries. Example: `/bin/ls`, `/bin/bash`
+- /root: Home directory for the root superuser account. Example: `/root/.bashrc`
+
+Activity 3 Commands:
+1. Create directories:
+   `mkdir -p "October_Assessment/Networking" "October_Assessment/Linux" "October_Assessment/Reports"`
+2. Create empty files:
+   `touch "October_Assessment/Networking/subnetting.txt" "October_Assessment/Networking/network_notes.txt"`
+   `touch "October_Assessment/Linux/commands.txt" "October_Assessment/Linux/filesystem.txt"`
+   `touch "October_Assessment/Reports/assessment_summary.txt"`
+3. Display directory structure: `tree October_Assessment`
+4. List files including hidden: `ls -la October_Assessment`
+5. Absolute path: `realpath October_Assessment`
+
+Activity 4 Operations & Commands:
+1. Write paragraph: `echo "Network baseline documentation" > October_Assessment/Linux/commands.txt`
+2. Display contents: `cat October_Assessment/Linux/commands.txt`
+3. Append line: `echo "Added new command logs" >> October_Assessment/Linux/commands.txt`
+4. Copy file: `cp October_Assessment/Linux/commands.txt October_Assessment/Linux/commands_backup.txt`
+5. Rename file: `mv October_Assessment/Linux/filesystem.txt October_Assessment/Linux/linux_filesystem.txt`
+6. Move copy: `cp October_Assessment/Networking/subnetting.txt October_Assessment/Reports/`
+7. Remove temporary file: `rm October_Assessment/Linux/commands_backup.txt`
+
+
+TASK 5: LINUX PERMISSIONS AND FILE MANAGEMENT 
+
+Activity 1 Permissions:
+- `-rw-r--r--`: File owner has read/write, group has read, others have read.
+1. `r`, `w`, `x`, `-`: Read (4), Write (2), Execute (1), No permission (0).
+2. File vs Directory Permissions: For files, `x` allows execution. For directories, `x` allows traversing into the directory (`cd`).
+3. Owner, Group, Others: Owner is file creator, Group is associated user group, Others represents all other system accounts.
+4. `rw-r-----`: Owner has read/write, Group has read-only, Others have no access.
+
+Activity 2 Permission Modification:
+1. Set permission 640: `chmod 640 network_report.txt`
+2. Symbolic meaning of 640: Owner = Read + Write (`rw-`), Group = Read-only (`r--`), Others = None (`---`).
+3. Change to 600: `chmod 600 network_report.txt` (Restricts access exclusively to file owner; group lost read access).
+
+Activity 3 Ownership Commands:
+1. Display ownership: `ls -l network_report.txt`
+2. Change ownership: `chown user:group network_report.txt`
+3. Why sudo required: Changing ownership prevents unauthorized users from shifting file liability or bypassing disk quotas.
+
+Activity 4 Commands & Questions:
+1. Find txt files: `find . -type f -name "*.txt"`
+2. Search text inside file: `grep "ERROR" application.log`
+3. First lines: `head -n 5 application.log`
+4. Last lines: `tail -n 5 application.log`
+5. Count lines, words, chars: `wc application.log`
+6. Identify file type: `file application.log`
+
+Questions:
+1. `chmod` alters file access permissions; `chown` alters user/group ownership.
+2. `777` grants full read, write, execute rights to every user on the system, introducing severe privilege escalation vulnerabilities.
+3. `>` overwrites target file content; `>>` appends output to the end of the file.
+4. Standard output (stdout / 1) handles standard program responses; Standard error (stderr / 2) captures error diagnostics separately.
+5. Least Privilege limits user/process access strictly to what is necessary, minimizing potential blast radius from security breaches.
+
+
+TASK 6: LINUX MINI CHALLENGE: INVESTIGATE IT ENVIRONMENT 
+
+Step 1 & 2 Investigation Steps & Commands:
+1. Display log contents: `cat October_Assessment/Linux_Investigation/logs/application.log`
+2. Search for ERROR: `grep "ERROR" October_Assessment/Linux_Investigation/logs/application.log`
+3. Count ERROR entries: `grep -c "ERROR" October_Assessment/Linux_Investigation/logs/application.log` (Result: 2)
+4. Display last 3 lines: `tail -n 3 October_Assessment/Linux_Investigation/logs/application.log`
+5. Find files in lab: `find October_Assessment/Linux_Investigation -type f`
+6. Create backup copy: `cp October_Assessment/Linux_Investigation/logs/application.log October_Assessment/Linux_Investigation/backup/`
+
+Step 3 Permission Investigation:
+1. View permissions: `ls -l October_Assessment/Linux_Investigation/reports/network_report.txt`
+2. Change permissions: `chmod 600 October_Assessment/Linux_Investigation/reports/network_report.txt`
+3. Explanation: Permission `600` (`rw-------`) allows only the file owner to read and write. Group and Others are completely blocked.
+
+Step 4 Document Investigation (Investigation_summary.txt):
+- Error Entries Found: 2
+- Errors Identified:
+  1. 2026-10-16 09:12:45 ERROR Failed to connect to database
+  2. 2026-10-16 09:14:02 ERROR Database connection timeout
+- Backup Location: `October_Assessment/Linux_Investigation/backup/application.log`
+- Applied Permissions: `600` (`rw-------`) on `network_report.txt`
+
+Questions:
+1. Search command: `grep`
+2. Count command: `grep -c "ERROR" application.log` or `grep "ERROR" application.log | wc -l`
+3. Log Backup Purpose: Preserves critical forensic evidence before logs rotate or get overwritten.
+4. Permission 644: Owner has Read+Write, Group and Others have Read-only.
+5. File Present but Unopenable: Inspect read permissions (`ls -l`) and confirm user membership in owner/group.
+6. Missing File vs Permission Denied: Missing file returns `No such file or directory`; Permission issue returns `Permission denied`.
+================================================================================
