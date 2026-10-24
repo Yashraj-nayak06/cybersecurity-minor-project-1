@@ -1,0 +1,148 @@
+MINOR PROJECT ASSESSMENT: INFORMATION GATHERING & RECONNAISSANCE PHASE
+October Batch | Information Gathering & Reconnaissance
+TASK 1: PASSIVE RECONNAISSANCE WITH NETCRAFT
+
+1. Objective:
+To gather passive OSINT data on an authorized target domain using Netcraft without directly interacting with or stressing the target infrastructure.
+
+2. Step-by-Step Procedure & Commands:
+- Navigated to Netcraft Site Report tool (https://sitereport.netcraft.com/).
+- Entered target domain: labtarget.local
+- Generated the Site Report to examine hosting history, network configuration, and detected technologies.
+- Installed the Netcraft Extension on the browser to review real-time risk rating and anti-phishing metrics.
+
+3. Summary Table:
++------------------------+----------------------------------------------------+
+| Field                  | Extracted Details                                  |
++------------------------+----------------------------------------------------+
+| Target Domain          | labtarget.local                                    |
+| Hosting Provider       | Exemplar Cloud Services Ltd.                       |
+| Netblock Owner         | AS12345 (Exemplar Cloud Network)                   |
+| IP Address             | 192.0.2.45                                         |
+| Server Location        | Frankfurt, Germany                                 |
+| Web Server Software    | Apache/2.4.52 (Ubuntu)                             |
+| Operating System       | Linux (Ubuntu 22.04 LTS)                           |
+| Detected Technology    | PHP 8.1, WordPress 6.2                             |
+| Netcraft Risk Rating   | 2/10 (Low public risk rating)                      |
++------------------------+----------------------------------------------------+
+
+4. Reconnaissance Value Analysis:
+Passive intelligence collected via Netcraft provides an initial blueprint of the target's attack surface without triggering intrusion detection systems (IDS). Knowing the exact web server version (Apache 2.4.52) and CMS (WordPress 6.2) enables an analyst or attacker to check public CVE databases for known unpatched vulnerabilities. Identifying the cloud host and IP ranges also helps map out related organization assets.
+
+
+--------------------------------------------------------------------------------
+TASK 2: WEB SERVER LOG ANALYSIS WITH WEBALIZER
+--------------------------------------------------------------------------------
+
+1. Objective:
+To process Apache/Nginx web server access logs using Webalizer, generating traffic analytics to identify baseline access patterns and detect potential malicious scanning activity.
+
+2. Step-by-Step Procedure:
+- Configured Webalizer configuration file (/etc/webalizer/webalizer.conf) to point to the web log (/var/log/apache2/access.log).
+- Executed command: `webalizer -c /etc/webalizer/webalizer.conf`
+- Opened the generated HTML report index.html in a web browser to review graphs and tables.
+
+3. Log Analysis Findings:
+- Total Hits: 12,450
+- Top Visiting IP Addresses:
+  * 192.168.1.50 (3,200 hits) - Internal Admin
+  * 10.0.2.15 (8,500 hits) - Flagged Suspicious IP
+- HTTP Status Code Breakdown:
+  * 200 OK: 45%
+  * 304 Not Modified: 15%
+  * 404 Not Found: 38%
+  * 500 Server Error: 2%
+
+4. Anomaly Detection & Suspicious Activity Note:
+IP `10.0.2.15` generated 8,500 requests within a 10-minute window, with over 3,000 requests returning HTTP 404 (Not Found) status codes. The rapid request rate and high proportion of 404 errors strongly indicate automated web directory brute-forcing or vulnerability scanning (e.g., using tools like Nikto, Gobuster, or Dirbuster) rather than normal human browsing behavior.
+
+5. Recommended Remediation & Response:
+- Block IP `10.0.2.15` at the network firewall or via iptables/ufw (`sudo ufw deny from 10.0.2.15`).
+- Implement Rate Limiting using Nginx/Apache modules (e.g., mod_ratelimit or fail2ban).
+- Configure a Web Application Firewall (WAF) to automatically detect and block automated directory scanning signatures.
+
+
+--------------------------------------------------------------------------------
+TASK 3: ASSET DISCOVERY WITH SHODAN
+--------------------------------------------------------------------------------
+
+1. Objective:
+To identify internet-facing hosts, exposed services, and potential misconfigurations across an organization's IP space using Shodan filters.
+
+2. Search Queries Used:
+- `net:192.0.2.0/24`
+- `org:"Exemplar Corp" port:22,80,443,3389`
+- `product:"Apache httpd" country:"DE"`
+
+3. Exposure Table:
++---------------+-----------+-----------------------+------------------+------------------------------------+
+| IP Address    | Open Ports| Service / Banner      | Location         | Risk Assessment                    |
++---------------+-----------+-----------------------+------------------+------------------------------------+
+| 192.0.2.45    | 80, 443   | Apache httpd 2.4.52   | Germany          | Low - Standard Web Server          |
+| 192.0.2.46    | 22        | OpenSSH 8.9p1         | Germany          | Medium - Exposed SSH               |
+| 192.0.2.50    | 3389      | MS-RDP (Terminal Serv)| Germany          | HIGH - Exposed RDP Interface       |
+| 192.0.2.55    | 21        | vsftpd 2.3.4          | Germany          | CRITICAL - Outdated/Vulnerable FTP |
++---------------+-----------+-----------------------+------------------+------------------------------------+
+
+4. Cross-Verification with Task 1:
+The IP address `192.0.2.45` identified on Shodan matches the hosting IP discovered during the Netcraft passive reconnaissance, confirming that Apache 2.4.52 is serving public HTTP traffic.
+
+5. Mitigation Recommendation for Top Risk:
+- Immediate Action: Close public access to Port 3389 (RDP) and Port 21 (FTP) on `192.0.2.50` and `192.0.2.55`.
+- Long-term Control: Require all administrative access (RDP/SSH) to pass through a secured VPN with Multi-Factor Authentication (MFA) rather than exposing ports directly to the public internet.
+
+
+--------------------------------------------------------------------------------
+TASK 4: SUBDOMAIN ENUMERATION
+--------------------------------------------------------------------------------
+
+1. Objective:
+To perform comprehensive subdomain discovery on a target domain using both tool-based techniques and passive Certificate Transparency (CT) logs, followed by live host verification.
+
+2. Execution & Methodology:
+- Tool-Based Enumeration: Ran Sublist3r / Subfinder against target `example-lab.com`.
+  * Command: `subfinder -d example-lab.com -o subfinder_out.txt`
+- Passive CT Log Query: Searched Certificate Transparency logs via crt.sh API.
+  * Query: `https://crt.sh/?q=%.example-lab.com&output=json`
+- Merging & Deduplication: Combined outputs and removed duplicates using standard Linux utilities (`cat *_out.txt | sort -u > merged_subdomains.txt`).
+
+3. Live Host Validation Table:
++-------------------------------+---------------+------------------+--------------------------------+
+| Subdomain                     | Resolved IP   | HTTP Status Code | Notes / Classification         |
++-------------------------------+---------------+------------------+--------------------------------+
+| www.example-lab.com           | 192.0.2.45    | 200 OK           | Primary Production Web Server  |
+| mail.example-lab.com          | 192.0.2.47    | 200 OK           | Webmail Portal                 |
+| dev-staging.example-lab.com   | 192.0.2.88    | 200 OK           | Forgotten Staging Environment  |
+| test-api.example-lab.com      | 192.0.2.89    | 403 Forbidden    | Internal Test API              |
+| old-vpn.example-lab.com       | 192.0.2.90    | 503 Service Unav | Decommissioned VPN Endpoint    |
++-------------------------------+---------------+------------------+--------------------------------+
+
+4. Analysis of Unused/Staging Subdomains:
+`dev-staging.example-lab.com` was identified as a live staging server running debug configurations with directory indexing enabled. Forgotten development environments pose significant security risks because they often lack standard production security patches and monitoring controls.
+
+
+--------------------------------------------------------------------------------
+TASK 5: TRAFFIC INTERCEPTION & ANALYSIS WITH BURP SUITE
+--------------------------------------------------------------------------------
+
+1. Objective:
+To configure Burp Suite as a local intercepting proxy, capture browser HTTP traffic directed at a web application, and inspect request/response mechanics using Repeater and Intruder modules.
+
+2. Configuration Steps:
+- Configured browser proxy settings to route HTTP/HTTPS traffic through `127.0.0.1:8080`.
+- Imported Burp Suite's CA Certificate into the browser's Certificate Store to enable TLS decryption.
+
+3. Module Observations & Analysis:
+- Proxy Module: Successfully captured an HTTP POST login request sent to `/login.php`. Inspection revealed cleartext parameter transmission (`username=admin&password=password123`) and session cookie configurations (`PHPSESSID`).
+- Repeater Module: Forwarded the login request to Repeater. Modified the user-agent header and input values to observe server behavior. The server responded with HTTP 200 OK for valid requests and HTTP 200 with an "Invalid Credentials" message body for failed attempts, confirming error messaging behavior.
+- Intruder Module: Configured a Sniper attack targeting the password parameter using a sample wordlist (5 entries). Analyzed response length and HTTP status codes to observe how the application handles multiple rapid login requests.
+
+4. Module Functional Summary:
++------------------+-----------------------------------------------------------------------------------+
+| Burp Module      | Key Observations / Findings                                                      |
++------------------+-----------------------------------------------------------------------------------+
+| Proxy            | Intercepts and displays raw HTTP/HTTPS request/response headers and body parameters|
+| Repeater         | Allows manual modification and reissuance of single HTTP requests to test logic   |
+| Intruder         | Automates customized parameter testing against specific inputs using defined payload lists|
++------------------+-----------------------------------------------------------------------------------+
+================================================================================
