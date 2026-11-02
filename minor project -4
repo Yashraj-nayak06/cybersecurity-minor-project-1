@@ -1,0 +1,95 @@
+================================================================================
+MINOR PROJECT ASSESSMENT PART 2
+================================================================================
+
+--------------------------------------------------------------------------------
+TASK 1: CORS MISCONFIGURATION ASSESSMENT
+--------------------------------------------------------------------------------
+
+1. Objective:
+To identify an API/application exposing permissive Cross-Origin Resource Sharing (CORS) headers and demonstrate cross-origin data exposure risk without exfiltrating real user data.
+
+2. Step-by-Step Procedure & Observations:
+- Step 1: Sent requests to the target API endpoint using Burp Repeater with various custom `Origin` headers (e.g., `Origin: http://evil-attacker.com`) and recorded the server's `Access-Control-Allow-Origin` response header.
+- Step 2: Checked whether the server dynamically reflected the arbitrary `Origin` back in the response and simultaneously set `Access-Control-Allow-Credentials: true`.
+- Step 3: Tested whether the literal string value `null` was trusted as a valid origin by the server.
+- Step 4: Attack Simulation Concept: If an application reflects an arbitrary origin and permits credentials, an attacker can host a malicious script on an external site using `fetch('https://vulnerable-api.com/data', {credentials: 'include'})`. Because the browser trusts the reflected origin and credentials, the attacker's script can successfully read authenticated user data.
+- Step 5: Recommended Fix: Implement a strict, explicit origin allowlist on the server side (never dynamically reflect arbitrary origins) and avoid using `Access-Control-Allow-Credentials: true` with wildcard or untrusted origins.
+
+--------------------------------------------------------------------------------
+TASK 2: API-LEVEL IDOR (BOLA) TESTING
+--------------------------------------------------------------------------------
+
+1. Objective:
+To test a multi-user application's API endpoints for Broken Object Level Authorization (IDOR/BOLA) vulnerabilities.
+
+2. Step-by-Step Procedure & Findings:
+- Step 1: Logged into the application as User A, captured the API request fetching a user-specific resource (e.g., `/api/v1/orders/1001`), and noted the object ID.
+- Step 2: Replayed the exact same request using User A's session token but modified the object ID to an adjacent value belonging to User B (e.g., `/api/v1/orders/1002`).
+- Step 3: Logged into User B's account independently to verify whether User A's token successfully retrieved User B's private object data without authorization constraints.
+- Step 4: Checked API list responses and verified whether array endpoints returned un-filtered data arrays containing records belonging to other users.
+- Step 5: Root Cause & Fix: The server failed to execute proper session-to-object ownership validation. 
+  * Recommended Fix: Implement rigorous server-side authorization checks verifying that the currently authenticated user owns or holds explicit role-based access rights to the requested object ID prior to database querying.
+
+--------------------------------------------------------------------------------
+TASK 3: UNRESTRICTED FILE UPLOAD - FILTER BYPASS
+--------------------------------------------------------------------------------
+
+1. Objective:
+To attempt bypassing file-upload restrictions on a lab application using three distinct techniques without executing any uploaded payloads.
+
+2. Bypass Techniques Summary Table:
++--------------------------------+--------------------------+--------------------------------------------------------+
+| Technique Attempted            | Outcome (Blocked/Bypassed)| Root-Cause Explanation                                 |
++--------------------------------+--------------------------+--------------------------------------------------------+
+| Direct Disallowed File Upload  | Blocked                  | Server checks client-side extension against blacklist. |
+| Double-Extension Bypass        | Bypassed                 | Filter only checked final extension (e.g., .jpg.php).  |
+| Case-Manipulation Bypass       | Bypassed                 | Filter was case-sensitive (e.g., file.PhP allowed).    |
+| Content-Type Header Spoofing   | Bypassed                 | Server blindly trusted HTTP Content-Type header        |
+|                                |                          | supplied in multipart form data (e.g., image/jpeg).    |
++--------------------------------+--------------------------+--------------------------------------------------------+
+
+--------------------------------------------------------------------------------
+TASK 4: FILE UPLOAD - IMPACT & CONTAINMENT REVIEW
+--------------------------------------------------------------------------------
+
+1. Objective:
+To evaluate the real-world security impact of a successful upload filter bypass and design multi-layered containment controls.
+
+2. Analysis & Review Steps:
+- Step 1: Impact Analysis: If a web server is misconfigured to execute scripts within the upload directory, an attacker could successfully upload a web shell and achieve remote code execution (RCE) on the underlying server infrastructure.
+- Step 2: Directory Execution Inspection: Inspected server configuration and verified whether script execution handlers (such as PHP/Python interpreters) were active inside the user-content upload folder.
+- Step 3: Magic-Byte Validation: Evaluated file content validation; noted that relying solely on file extensions is insecure and that checking file headers/magic bytes (e.g., JPEG SOI marker `FF D8 FF`) is necessary to verify true file types.
+- Step 4: Storage Path Handling: Checked file naming convention; storing files under predictable original names allows direct execution collisions, whereas randomizing filenames mitigates direct referencing risks.
+- Step 5: Prioritized Containment Roadmap:
+  1. Disable script execution permissions (e.g., turn off PHP handling via `.htaccess` or Nginx location blocks) in the upload directory.
+  2. Store uploaded assets on an isolated storage server or dedicated CDN domain (e.g., static domain).
+  3. Enforce strict server-side validation including magic byte inspection and randomized file renaming.
+
+--------------------------------------------------------------------------------
+TASK 5: CONSOLIDATED VULNERABILITY REPORT & REMEDIATION PLAN
+--------------------------------------------------------------------------------
+
+1. Objective:
+To consolidate CORS, IDOR, and File Upload findings into a structured professional vulnerability report complete with qualitative severity ratings, technical justifications, and a prioritized remediation roadmap.
+
+2. Executive Summary & Findings Overview:
+- Finding 1: CORS Misconfiguration (Severity: High)
+  * Description & Evidence: API endpoints dynamically reflect arbitrary `Origin` headers alongside credential sharing permissions.
+  * Impact: Allows malicious third-party websites to read sensitive authenticated user responses via cross-origin fetch requests.
+  * Remediation: Deploy a hardcoded origin allowlist and disable wildcard/dynamic reflection when credentials are enabled.
+- Finding 2: API-Level IDOR / BOLA (Severity: Critical)
+  * Description & Evidence: Lack of object-level authorization checks allows cross-user resource access by modifying numeric IDs.
+  * Impact: Complete unauthorized disclosure and tampering of private user records across accounts.
+  * Remediation: Implement strict server-side authorization mapping user session identifiers to object ownership records.
+- Finding 3: Unrestricted File Upload & Weak Filtering (Severity: High)
+  * Description & Evidence: Client-side and superficial extension checks bypassed via double extensions and content-type spoofing.
+  * Impact: Potential remote code execution if upload directory permits script execution.
+  * Remediation: Enforce robust magic-byte validation, randomize stored filenames, and strip execution permissions from upload directories.
+
+3. Prioritized Remediation Roadmap:
+- Phase 1 (Immediate - Critical): Fix the API IDOR vulnerability to prevent active data exfiltration between user accounts.
+- Phase 2 (High Priority): Patch the file upload mechanism by disabling execution privileges in upload directories and implementing strict content validation.
+- Phase 3 (Medium Priority): Harden API CORS policies by replacing dynamic reflection with a strict trusted origin allowlist.
+- Integration Note: These findings tie directly into the earlier reconnaissance phases (Netcraft, Shodan, Subdomain Enumeration, and Burp Suite analysis)[cite: 18], demonstrating how initial asset mapping and traffic interception lead directly to uncovering deep access control and input validation flaws.
+================================================================================
